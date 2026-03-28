@@ -1,0 +1,133 @@
+version: '3.8'
+
+services:
+  # ==========================================
+  # 🗄️ БЛОК 1: БАЗЫ ДАННЫХ
+  # ==========================================
+  
+  postgres-components:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: components_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d components_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  postgres-compatibility:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: compatibility_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d compatibility_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  postgres-power:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: power_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d power_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  postgres-assembly:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: assembly_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d assembly_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis-bot:
+    image: redis:7-alpine
+
+  # ==========================================
+  # 🚀 БЛОК 2: НАШИ МИКРОСЕРВИСЫ
+  # ==========================================
+
+  component-service:
+    build:
+      context: ./component-service   # Папка, откуда берем код (pom.xml и src)
+      dockerfile: ../Dockerfile      # Файл сборки берем из корня
+    ports:
+      - "8081:8081"
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres-components:5432/components_db
+      - SPRING_DATASOURCE_USERNAME=postgres
+      - SPRING_DATASOURCE_PASSWORD=postgres
+      - SPRING_JPA_HIBERNATE_DDL_AUTO=update
+    depends_on:
+      postgres-components:
+        condition: service_healthy
+
+  compatibility-service:
+    build:
+      context: ./compatibility-service
+      dockerfile: ../Dockerfile
+    ports:
+      - "8082:8082"
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres-compatibility:5432/compatibility_db
+      - SPRING_DATASOURCE_USERNAME=postgres
+      - SPRING_DATASOURCE_PASSWORD=postgres
+      - SPRING_JPA_HIBERNATE_DDL_AUTO=update
+    depends_on:
+      postgres-compatibility:
+        condition: service_healthy
+
+  power-service:
+    build:
+      context: ./power-service
+      dockerfile: ../Dockerfile
+    ports:
+      - "8083:8083"
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres-power:5432/power_db
+      - SPRING_DATASOURCE_USERNAME=postgres
+      - SPRING_DATASOURCE_PASSWORD=postgres
+      - SPRING_JPA_HIBERNATE_DDL_AUTO=update
+    depends_on:
+      postgres-power:
+        condition: service_healthy
+
+  assembly-service:
+    build:
+      context: ./assembly-service
+      dockerfile: ../Dockerfile
+    ports:
+      - "8084:8084"
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres-assembly:5432/assembly_db
+      - SPRING_DATASOURCE_USERNAME=postgres
+      - SPRING_DATASOURCE_PASSWORD=postgres
+      - SPRING_JPA_HIBERNATE_DDL_AUTO=update
+    depends_on:
+      postgres-assembly:
+        condition: service_healthy
+
+  bot-service:
+    build:
+      context: ./bot-service
+      dockerfile: ../Dockerfile
+    ports:
+      - "8085:8085"
+    environment:
+      - SPRING_DATA_REDIS_HOST=redis-bot
+      - SPRING_DATA_REDIS_PORT=6379
+    depends_on:
+      - redis-bot
