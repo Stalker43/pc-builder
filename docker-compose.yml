@@ -53,6 +53,19 @@ services:
       timeout: 5s
       retries: 5
 
+  # ДОБАВЛЕНО: База данных для бота!
+  postgres-bot:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: bot_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d bot_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
   redis-bot:
     image: redis:7-alpine
 
@@ -62,8 +75,8 @@ services:
 
   component-service:
     build:
-      context: ./component-service   # Папка, откуда берем код (pom.xml и src)
-      dockerfile: ../Dockerfile      # Файл сборки берем из корня
+      context: ./component-service
+      dockerfile: ../Dockerfile
     ports:
       - "8081:8081"
     environment:
@@ -127,7 +140,14 @@ services:
     ports:
       - "8085:8085"
     environment:
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres-bot:5432/bot_db
+      - SPRING_DATASOURCE_USERNAME=postgres
+      - SPRING_DATASOURCE_PASSWORD=postgres
+      - SPRING_JPA_HIBERNATE_DDL_AUTO=update
       - SPRING_DATA_REDIS_HOST=redis-bot
       - SPRING_DATA_REDIS_PORT=6379
     depends_on:
-      - redis-bot
+      postgres-bot:
+        condition: service_healthy
+      redis-bot:
+        condition: service_started
