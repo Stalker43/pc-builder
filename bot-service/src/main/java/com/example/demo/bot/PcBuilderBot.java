@@ -4,6 +4,7 @@ import com.example.demo.entity.BotUser;
 import com.example.demo.repository.BotUserRepository;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.RestTemplate;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.objects.Update;
@@ -48,7 +49,7 @@ public class PcBuilderBot extends TelegramLongPollingBot {
             } else if (messageText.equals("Собрать ПК 🛠")) {
                 sendMessage(chatId, "Скоро здесь будет мастер подбора комплектующих! ⚙️");
             } else if (messageText.equals("Каталог 📋")) {
-                sendMessage(chatId, "Каталог пока пуст, но скоро мы подключим базу деталей! 📦");
+                sendCatalog(chatId);
             } else {
                 sendMessage(chatId, "Я пока учусь понимать кнопки. Нажми что-нибудь из меню ниже! ↓");
             }
@@ -122,6 +123,38 @@ public class PcBuilderBot extends TelegramLongPollingBot {
             execute(message);
         } catch (TelegramApiException e) {
             System.out.println("Ошибка отправки сообщения: " + e.getMessage());
+        }
+    }
+
+    private void sendCatalog(long chatId) {
+        sendMessage(chatId, "⏳ Открываю каталог процессоров...");
+
+        try {
+            org.springframework.web.client.RestTemplate restTemplate = new org.springframework.web.client.RestTemplate();
+            String url = "http://component-service:8081/api/cpus";
+
+
+            com.example.demo.dto.CpuDto[] cpus = restTemplate.getForObject(url, com.example.demo.dto.CpuDto[].class);
+
+            if (cpus == null || cpus.length == 0) {
+                sendMessage(chatId, "📦 Склад работает, но он пока пуст. В базе данных еще нет процессоров!");
+            } else {
+
+                StringBuilder catalogMessage = new StringBuilder("📦 Доступные процессоры:\n\n");
+
+                for (com.example.demo.dto.CpuDto cpu : cpus) {
+                    catalogMessage.append("🔹 ").append(cpu.getName()).append("\n")
+                            .append("   ⚙️ Сокет: ").append(cpu.getSocket()).append("\n")
+                            .append("   🧠 Ядра: ").append(cpu.getCores()).append("\n")
+                            .append("   🔥 TDP: ").append(cpu.getTdp()).append(" Вт\n")
+                            .append("   💰 Цена: $").append(cpu.getPrice()).append("\n\n");
+                }
+
+                sendMessage(chatId, catalogMessage.toString());
+            }
+
+        } catch (Exception e) {
+            sendMessage(chatId, "❌ Склад сейчас недоступен. Ошибка: " + e.getMessage());
         }
     }
 }
