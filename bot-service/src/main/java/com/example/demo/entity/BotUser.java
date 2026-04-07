@@ -15,4 +15,8 @@ public class BotUser {
     private Long telegramId;   // Уникальный ID пользователя в Telegram
     private Long chatId;       // ID чата для отправки сообщений
     private String firstName;  // Имя, чтобы бот знал, как обращаться
+
+    // Запоминает, на каком шаге сборки находится пользователь
+    // Например: "IDLE" (ничего не делает), "CHOOSING_CPU", "CHOOSING_MB" и т.д.
+    private String state;
 }

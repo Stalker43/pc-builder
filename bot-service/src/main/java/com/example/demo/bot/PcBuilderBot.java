@@ -1,16 +1,19 @@
 package com.example.demo.bot;
 
+import com.example.demo.dto.*;
 import com.example.demo.entity.BotUser;
 import com.example.demo.repository.BotUserRepository;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
-import org.springframework.web.client.RestTemplate;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.objects.Update;
+import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.ReplyKeyboardMarkup;
+import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardButton;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.KeyboardRow;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
+import org.springframework.web.client.RestTemplate;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -23,6 +26,8 @@ public class PcBuilderBot extends TelegramLongPollingBot {
     private String botName;
 
     private final BotUserRepository botUserRepository;
+    private final RestTemplate restTemplate = new RestTemplate();
+    private final String API_URL = "http://component-service:8081/api/";
 
     public PcBuilderBot(@Value("${telegram.bot.token}") String botToken, BotUserRepository botUserRepository) {
         super(botToken);
@@ -36,6 +41,7 @@ public class PcBuilderBot extends TelegramLongPollingBot {
 
     @Override
     public void onUpdateReceived(Update update) {
+        // Обработка текстовых сообщений
         if (update.hasMessage() && update.getMessage().hasText()) {
             String messageText = update.getMessage().getText();
             long chatId = update.getMessage().getChatId();
@@ -49,17 +55,32 @@ public class PcBuilderBot extends TelegramLongPollingBot {
             } else if (messageText.equals("Собрать ПК 🛠")) {
                 sendMessage(chatId, "Скоро здесь будет мастер подбора комплектующих! ⚙️");
             } else if (messageText.equals("Каталог 📋")) {
-                sendCatalog(chatId);
+                showCatalogMenu(chatId);
             } else {
                 sendMessage(chatId, "Я пока учусь понимать кнопки. Нажми что-нибудь из меню ниже! ↓");
             }
         }
+        // Обработка Inline-кнопок каталога
+        else if (update.hasCallbackQuery()) {
+            String callData = update.getCallbackQuery().getData();
+            long chatId = update.getCallbackQuery().getMessage().getChatId();
+
+            switch (callData) {
+                case "CATALOG_CPU": sendCpuCatalog(chatId); break;
+                case "CATALOG_GPU": sendGpuCatalog(chatId); break;
+                case "CATALOG_MB":  sendMbCatalog(chatId); break;
+                case "CATALOG_RAM": sendRamCatalog(chatId); break;
+                case "CATALOG_PSU": sendPsuCatalog(chatId); break;
+                case "CATALOG_CASE": sendCaseCatalog(chatId); break;
+            }
+        }
     }
+
+    // --- БАЗОВЫЕ МЕТОДЫ (МЕНЮ И ПРОФИЛЬ) ---
 
     private void handleStartCommand(long chatId, long telegramId, String firstName) {
         Optional<BotUser> user = botUserRepository.findByTelegramId(telegramId);
         String welcomeText;
-
         if (user.isEmpty()) {
             BotUser newUser = new BotUser();
             newUser.setTelegramId(telegramId);
@@ -70,8 +91,6 @@ public class PcBuilderBot extends TelegramLongPollingBot {
         } else {
             welcomeText = "С возвращением, " + firstName + "! 🚀 Готов продолжить сборку?";
         }
-
-        // Отправляем сообщение вместе с меню (кнопками)
         sendMenuMessage(chatId, welcomeText);
     }
 
@@ -87,74 +106,159 @@ public class PcBuilderBot extends TelegramLongPollingBot {
         message.setChatId(String.valueOf(chatId));
         message.setText(text);
 
-        // Создаем клавиатуру
         ReplyKeyboardMarkup keyboardMarkup = new ReplyKeyboardMarkup();
         List<KeyboardRow> keyboard = new ArrayList<>();
-
-        // Первый ряд кнопок
-        KeyboardRow row1 = new KeyboardRow();
-        row1.add("Собрать ПК 🛠");
-
-        // Второй ряд кнопок
-        KeyboardRow row2 = new KeyboardRow();
-        row2.add("Каталог 📋");
-        row2.add("Мой профиль 👤");
-
-        keyboard.add(row1);
-        keyboard.add(row2);
+        KeyboardRow row1 = new KeyboardRow(); row1.add("Собрать ПК 🛠");
+        KeyboardRow row2 = new KeyboardRow(); row2.add("Каталог 📋"); row2.add("Мой профиль 👤");
+        keyboard.add(row1); keyboard.add(row2);
 
         keyboardMarkup.setKeyboard(keyboard);
-        keyboardMarkup.setResizeKeyboard(true); // Делает кнопки компактными
+        keyboardMarkup.setResizeKeyboard(true);
         message.setReplyMarkup(keyboardMarkup);
+        executeMessage(message);
+    }
 
+    private void showCatalogMenu(long chatId) {
+        SendMessage message = new SendMessage();
+        message.setChatId(String.valueOf(chatId));
+        message.setText("Выбери категорию комплектующих: 🔎");
+
+        InlineKeyboardMarkup markupInline = new InlineKeyboardMarkup();
+        List<List<InlineKeyboardButton>> rowsInline = new ArrayList<>();
+
+        List<InlineKeyboardButton> row1 = new ArrayList<>();
+        row1.add(createBtn("Процессоры 🧠", "CATALOG_CPU"));
+        row1.add(createBtn("Материнки 🎛", "CATALOG_MB"));
+
+        List<InlineKeyboardButton> row2 = new ArrayList<>();
+        row2.add(createBtn("Видеокарты 🎮", "CATALOG_GPU"));
+        row2.add(createBtn("Оперативка ⚡", "CATALOG_RAM"));
+
+        List<InlineKeyboardButton> row3 = new ArrayList<>();
+        row3.add(createBtn("Блоки питания 🔋", "CATALOG_PSU"));
+        row3.add(createBtn("Корпуса 📦", "CATALOG_CASE"));
+
+        rowsInline.add(row1); rowsInline.add(row2); rowsInline.add(row3);
+        markupInline.setKeyboard(rowsInline);
+        message.setReplyMarkup(markupInline);
+        executeMessage(message);
+    }
+
+    private InlineKeyboardButton createBtn(String text, String callback) {
+        InlineKeyboardButton btn = new InlineKeyboardButton();
+        btn.setText(text);
+        btn.setCallbackData(callback);
+        return btn;
+    }
+
+    // --- МЕТОДЫ КАТАЛОГА (ПОХОДЫ НА СКЛАД) ---
+
+    private void sendCpuCatalog(long chatId) {
         try {
-            execute(message);
-        } catch (TelegramApiException e) {
-            e.printStackTrace();
-        }
+            CpuDto[] items = restTemplate.getForObject(API_URL + "cpus", CpuDto[].class);
+            if (items == null || items.length == 0) { sendMessage(chatId, "📦 Процессоров пока нет на складе."); return; }
+
+            StringBuilder sb = new StringBuilder("📦 Доступные процессоры:\n\n");
+            for (CpuDto item : items) {
+                sb.append("🔹 ").append(item.getName()).append("\n")
+                        .append("   ⚙️ Сокет: ").append(item.getSocket()).append(" | 🧠 Ядра: ").append(item.getCores()).append("\n")
+                        .append("   💰 Цена: $").append(item.getPrice()).append("\n\n");
+            }
+            sendMessage(chatId, sb.toString());
+        } catch (Exception e) { sendMessage(chatId, "❌ Ошибка связи со складом: " + e.getMessage()); }
+    }
+
+    private void sendGpuCatalog(long chatId) {
+        try {
+            GpuDto[] items = restTemplate.getForObject(API_URL + "gpus", GpuDto[].class);
+            if (items == null || items.length == 0) { sendMessage(chatId, "📦 Видеокарт пока нет на складе."); return; }
+
+            StringBuilder sb = new StringBuilder("📦 Доступные видеокарты:\n\n");
+            for (GpuDto item : items) {
+                sb.append("🔹 ").append(item.getName()).append("\n")
+                        // Выводим требуемую мощность вместо TDP
+                        .append("   🎮 Память: ").append(item.getMemory()).append(" GB | ⚡ Требует БП: ").append(item.getPowerRequired()).append(" Вт\n")
+                        .append("   💰 Цена: $").append(item.getPrice()).append("\n\n");
+            }
+            sendMessage(chatId, sb.toString());
+        } catch (Exception e) { sendMessage(chatId, "❌ Ошибка связи со складом: " + e.getMessage()); }
+    }
+
+    private void sendMbCatalog(long chatId) {
+        try {
+            MotherboardDto[] items = restTemplate.getForObject(API_URL + "motherboards", MotherboardDto[].class);
+            if (items == null || items.length == 0) { sendMessage(chatId, "📦 Материнских плат пока нет на складе."); return; }
+
+            StringBuilder sb = new StringBuilder("📦 Доступные материнские платы:\n\n");
+            for (MotherboardDto item : items) {
+                sb.append("🔹 ").append(item.getName()).append("\n")
+                        .append("   ⚙️ Сокет: ").append(item.getSocket()).append(" | 📏 Форм-фактор: ").append(item.getFormFactor()).append("\n")
+                        .append("   💰 Цена: $").append(item.getPrice()).append("\n\n");
+            }
+            sendMessage(chatId, sb.toString());
+        } catch (Exception e) { sendMessage(chatId, "❌ Ошибка связи со складом: " + e.getMessage()); }
+    }
+
+    private void sendRamCatalog(long chatId) {
+        try {
+            RamDto[] items = restTemplate.getForObject(API_URL + "rams", RamDto[].class);
+            if (items == null || items.length == 0) { sendMessage(chatId, "📦 Оперативной памяти пока нет на складе."); return; }
+
+            StringBuilder sb = new StringBuilder("📦 Доступная оперативная память:\n\n");
+            for (RamDto item : items) {
+                sb.append("🔹 ").append(item.getName()).append("\n")
+                        .append("   ⚡ Тип: ").append(item.getType()).append(" | 💾 Объем: ").append(item.getCapacity()).append(" GB\n")
+                        .append("   💰 Цена: $").append(item.getPrice()).append("\n\n");
+            }
+            sendMessage(chatId, sb.toString());
+        } catch (Exception e) { sendMessage(chatId, "❌ Ошибка связи со складом: " + e.getMessage()); }
+    }
+
+    private void sendPsuCatalog(long chatId) {
+        try {
+            // Обрати внимание: если твой контроллер называется PsuController, ссылка скорее всего /psus
+            PsuDto[] items = restTemplate.getForObject(API_URL + "psus", PsuDto[].class);
+            if (items == null || items.length == 0) { sendMessage(chatId, "📦 Блоков питания пока нет на складе."); return; }
+
+            StringBuilder sb = new StringBuilder("📦 Доступные блоки питания:\n\n");
+            for (PsuDto item : items) {
+                sb.append("🔹 ").append(item.getName()).append("\n")
+                        .append("   🔋 Мощность: ").append(item.getWattage()).append(" Вт\n")
+                        .append("   💰 Цена: $").append(item.getPrice()).append("\n\n");
+            }
+            sendMessage(chatId, sb.toString());
+        } catch (Exception e) { sendMessage(chatId, "❌ Ошибка связи со складом: " + e.getMessage()); }
+    }
+
+    private void sendCaseCatalog(long chatId) {
+        try {
+            // Внимание: если контроллер называется PcCaseController, ссылка может быть /pccases или /cases.
+            // Я поставил /pccases, проверь у себя в контроллере!
+            PcCaseDto[] items = restTemplate.getForObject(API_URL + "pccases", PcCaseDto[].class);
+            if (items == null || items.length == 0) { sendMessage(chatId, "📦 Корпусов пока нет на складе."); return; }
+
+            StringBuilder sb = new StringBuilder("📦 Доступные корпуса:\n\n");
+            for (PcCaseDto item : items) {
+                sb.append("🔹 ").append(item.getName()).append("\n")
+                        .append("   📏 Форм-фактор: ").append(item.getFormFactor()).append("\n")
+                        .append("   💰 Цена: $").append(item.getPrice()).append("\n\n");
+            }
+            sendMessage(chatId, sb.toString());
+        } catch (Exception e) { sendMessage(chatId, "❌ Ошибка связи со складом: " + e.getMessage()); }
     }
 
     private void sendMessage(long chatId, String textToSend) {
         SendMessage message = new SendMessage();
         message.setChatId(String.valueOf(chatId));
         message.setText(textToSend);
+        executeMessage(message);
+    }
 
+    private void executeMessage(SendMessage message) {
         try {
             execute(message);
         } catch (TelegramApiException e) {
             System.out.println("Ошибка отправки сообщения: " + e.getMessage());
-        }
-    }
-
-    private void sendCatalog(long chatId) {
-        sendMessage(chatId, "⏳ Открываю каталог процессоров...");
-
-        try {
-            org.springframework.web.client.RestTemplate restTemplate = new org.springframework.web.client.RestTemplate();
-            String url = "http://component-service:8081/api/cpus";
-
-
-            com.example.demo.dto.CpuDto[] cpus = restTemplate.getForObject(url, com.example.demo.dto.CpuDto[].class);
-
-            if (cpus == null || cpus.length == 0) {
-                sendMessage(chatId, "📦 Склад работает, но он пока пуст. В базе данных еще нет процессоров!");
-            } else {
-
-                StringBuilder catalogMessage = new StringBuilder("📦 Доступные процессоры:\n\n");
-
-                for (com.example.demo.dto.CpuDto cpu : cpus) {
-                    catalogMessage.append("🔹 ").append(cpu.getName()).append("\n")
-                            .append("   ⚙️ Сокет: ").append(cpu.getSocket()).append("\n")
-                            .append("   🧠 Ядра: ").append(cpu.getCores()).append("\n")
-                            .append("   🔥 TDP: ").append(cpu.getTdp()).append(" Вт\n")
-                            .append("   💰 Цена: $").append(cpu.getPrice()).append("\n\n");
-                }
-
-                sendMessage(chatId, catalogMessage.toString());
-            }
-
-        } catch (Exception e) {
-            sendMessage(chatId, "❌ Склад сейчас недоступен. Ошибка: " + e.getMessage());
         }
     }
 }
