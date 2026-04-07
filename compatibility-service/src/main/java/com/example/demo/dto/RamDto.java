@@ -1,12 +1,12 @@
 package com.example.demo.dto;
+
 import lombok.Data;
 
 @Data
-public class MotherboardDto {
+public class RamDto {
     private Long id;
     private String name;
-    private String socket;
-    private String formFactor;
-    private String ramType;
+    private String type;     // DDR4, DDR5
+    private int capacity;    // Объем в ГБ
     private double price;
 }

@@ -19,4 +19,10 @@ public class BotUser {
     // Запоминает, на каком шаге сборки находится пользователь
     // Например: "IDLE" (ничего не делает), "CHOOSING_CPU", "CHOOSING_MB" и т.д.
     private String state;
+    private Long selectedCpuId;
+    private Long selectedMbId;
+    private Long selectedGpuId;
+    private Long selectedRamId;
+    private Long selectedPsuId;
+    private Long selectedCaseId;
 }

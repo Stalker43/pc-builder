@@ -59,10 +59,10 @@ public class DataInitializer implements CommandLineRunner {
         // 🎛 МАТЕРИНСКИЕ ПЛАТЫ
         // ==========================================
         if (motherboardRepository.count() == 0) {
-            motherboardRepository.save(createMb("ASUS ROG Strix B550-F", "AM4", "ATX", 180.0));
-            motherboardRepository.save(createMb("GIGABYTE B450M DS3H", "AM4", "Micro-ATX", 75.0));
-            motherboardRepository.save(createMb("MSI MAG B660M MORTAR", "LGA1700", "Micro-ATX", 160.0));
-            motherboardRepository.save(createMb("ASUS PRIME Z790-P", "LGA1700", "ATX", 220.0));
+            motherboardRepository.save(createMb("ASUS ROG Strix B550-F", "AM4", "ATX", "DDR4", 180.0));
+            motherboardRepository.save(createMb("GIGABYTE B450M DS3H", "AM4", "Micro-ATX", "DDR4", 75.0));
+            motherboardRepository.save(createMb("MSI MAG B660M MORTAR", "LGA1700", "Micro-ATX", "DDR5", 160.0));
+            motherboardRepository.save(createMb("ASUS PRIME Z790-P", "LGA1700", "ATX", "DDR5", 220.0));
             System.out.println("✅ Завезены материнские платы");
         }
 
@@ -119,9 +119,9 @@ public class DataInitializer implements CommandLineRunner {
         return gpu;
     }
 
-    private Motherboard createMb(String name, String socket, String formFactor, double price) {
+    private Motherboard createMb(String name, String socket, String formFactor,String ramType, double price) {
         Motherboard mb = new Motherboard();
-        mb.setName(name); mb.setSocket(socket); mb.setFormFactor(formFactor); mb.setPrice(price);
+        mb.setName(name); mb.setSocket(socket); mb.setFormFactor(formFactor); mb.setRamType(ramType); mb.setPrice(price);
         return mb;
     }
 
