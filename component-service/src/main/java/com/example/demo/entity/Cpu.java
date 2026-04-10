@@ -12,9 +12,9 @@ public class Cpu {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    private String name;        // Название (например, Intel Core i5-12400F)
-    private String socket;      // Сокет (например, LGA1700)
+    private String name;        // Название
+    private String socket;      // Сокет
     private int cores;          // Количество ядер
-    private int tdp;            // Тепловыделение (Ватт)
+    private int tdp;            // Тепловыделение
     private double price;       // Цена
 }

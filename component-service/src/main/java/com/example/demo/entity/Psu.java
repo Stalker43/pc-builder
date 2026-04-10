@@ -1,4 +1,4 @@
-package com.example.demo.entity; // Проверь свой пакет!
+package com.example.demo.entity;
 
 import jakarta.persistence.*;
 import lombok.Data;
@@ -12,8 +12,8 @@ public class Psu {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    private String name;           // Название (например, Deepcool PK650D)
-    private int wattage;           // Мощность в Ваттах (например, 650)
-    private String certification;  // Сертификат (например, 80+ Bronze)
+    private String name;           // Название
+    private int wattage;           // Мощность в Ваттах
+    private String certification;  // Сертификат
     private double price;          // Цена
 }

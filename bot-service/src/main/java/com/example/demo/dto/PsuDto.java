@@ -5,6 +5,6 @@ import lombok.Data;
 public class PsuDto {
     private Long id;
     private String name;
-    private int wattage; // Мощность в Ваттах
+    private int wattage;
     private double price;
 }

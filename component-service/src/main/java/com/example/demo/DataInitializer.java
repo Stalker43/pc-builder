@@ -29,9 +29,9 @@ public class DataInitializer implements CommandLineRunner {
     @Override
     public void run(String... args) throws Exception {
 
-        // ==========================================
-        // 🧠 ПРОЦЕССОРЫ
-        // ==========================================
+
+        // ПРОЦЕССОРЫ
+
         if (cpuRepository.count() == 0) {
             cpuRepository.save(createCpu("AMD Ryzen 5 5600X", "AM4", 6, 65, 150.0));
             cpuRepository.save(createCpu("AMD Ryzen 7 5800X3D", "AM4", 8, 105, 320.0));
@@ -42,11 +42,11 @@ public class DataInitializer implements CommandLineRunner {
         }
 
 
-        // ==========================================
-        // 🎮 ВИДЕОКАРТЫ
-        // ==========================================
+
+        // ВИДЕОКАРТЫ
+
         if (gpuRepository.count() == 0) {
-            // Передаем: Название, Память, Требуемый БП (powerRequired), Цена
+            // Передаем: Название, Память, Требуемый БП, Цена
             gpuRepository.save(createGpu("NVIDIA RTX 3060", 12, 550, 280.0));
             gpuRepository.save(createGpu("NVIDIA RTX 4070 Ti", 12, 700, 800.0));
             gpuRepository.save(createGpu("NVIDIA RTX 4090", 24, 850, 1600.0));
@@ -55,9 +55,9 @@ public class DataInitializer implements CommandLineRunner {
             System.out.println("✅ Завезены видеокарты");
         }
 
-        // ==========================================
-        // 🎛 МАТЕРИНСКИЕ ПЛАТЫ
-        // ==========================================
+
+        // МАТЕРИНСКИЕ ПЛАТЫ
+
         if (motherboardRepository.count() == 0) {
             motherboardRepository.save(createMb("ASUS ROG Strix B550-F", "AM4", "ATX", "DDR4", 180.0));
             motherboardRepository.save(createMb("GIGABYTE B450M DS3H", "AM4", "Micro-ATX", "DDR4", 75.0));
@@ -66,9 +66,9 @@ public class DataInitializer implements CommandLineRunner {
             System.out.println("✅ Завезены материнские платы");
         }
 
-        // ==========================================
-        // ⚡ ОПЕРАТИВНАЯ ПАМЯТЬ
-        // ==========================================
+
+        // ОПЕРАТИВНАЯ ПАМЯТЬ
+
         if (ramRepository.count() == 0) {
             ramRepository.save(createRam("Corsair Vengeance LPX 16GB", "DDR4", 16, 45.0));
             ramRepository.save(createRam("Kingston FURY Beast 32GB", "DDR4", 32, 85.0));
@@ -77,9 +77,9 @@ public class DataInitializer implements CommandLineRunner {
             System.out.println("✅ Завезена оперативная память");
         }
 
-        // ==========================================
-        // 🔋 БЛОКИ ПИТАНИЯ
-        // ==========================================
+
+        // БЛОКИ ПИТАНИЯ
+
         if (psuRepository.count() == 0) {
             psuRepository.save(createPsu("DeepCool PF500", 500, 40.0));
             psuRepository.save(createPsu("Chieftec Core 600W", 600, 55.0));
@@ -88,9 +88,9 @@ public class DataInitializer implements CommandLineRunner {
             System.out.println("✅ Завезены блоки питания");
         }
 
-        // ==========================================
-        // 📦 КОРПУСА
-        // ==========================================
+
+        // КОРПУСА
+
         if (pcCaseRepository.count() == 0) {
             pcCaseRepository.save(createCase("Zalman S2", "ATX", 45.0));
             pcCaseRepository.save(createCase("Thermaltake Versa H18", "Micro-ATX", 50.0));
@@ -102,7 +102,7 @@ public class DataInitializer implements CommandLineRunner {
         System.out.println("🎉 СКЛАД ПОЛНОСТЬЮ ЗАПОЛНЕН И ГОТОВ К РАБОТЕ!");
     }
 
-    // --- Вспомогательные методы для быстрого создания объектов ---
+
 
     private Cpu createCpu(String name, String socket, int cores, int tdp, double price) {
         Cpu cpu = new Cpu();

@@ -5,6 +5,6 @@ import lombok.Data;
 public class PcCaseDto {
     private Long id;
     private String name;
-    private String formFactor; // Поддерживаемый размер материнки
+    private String formFactor;
     private double price;
 }

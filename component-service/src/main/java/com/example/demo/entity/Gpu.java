@@ -12,8 +12,8 @@ public class Gpu {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    private String name;          // Название (например, NVIDIA RTX 3060)
-    private int memory;           // Объем видеопамяти в ГБ (например, 12)
-    private int powerRequired;    // Требуемая мощность блока питания в Ваттах (например, 550)
+    private String name;          // Название
+    private int memory;           // Объем видеопамяти в ГБ
+    private int powerRequired;    // Требуемая мощность блока питания в Ваттах
     private double price;         // Цена
 }

@@ -12,9 +12,9 @@ public class Motherboard {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    private String name;        // Название (например, MSI MAG B660M)
-    private String socket;      // Сокет (например, LGA1700 - для совместимости с CPU)
-    private String formFactor;  // Форм-фактор (ATX, Micro-ATX)
-    private String ramType;     // Тип поддерживаемой памяти (DDR4, DDR5)
+    private String name;        // Название
+    private String socket;      // Сокет
+    private String formFactor;  // Форм-фактор
+    private String ramType;     // Тип поддерживаемой памяти
     private double price;       // Цена
 }

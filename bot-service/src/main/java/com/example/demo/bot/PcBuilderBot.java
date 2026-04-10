@@ -44,7 +44,7 @@ public class PcBuilderBot extends TelegramLongPollingBot {
 
     @Override
     public void onUpdateReceived(Update update) {
-        // 1. Обработка текстовых сообщений (нижние кнопки)
+        // Обработка текстовых сообщений (нижние кнопки)
         if (update.hasMessage() && update.getMessage().hasText()) {
             String messageText = update.getMessage().getText();
             long chatId = update.getMessage().getChatId();
@@ -63,13 +63,13 @@ public class PcBuilderBot extends TelegramLongPollingBot {
                 sendMessage(chatId, "Я пока учусь понимать слова. Нажми что-нибудь из меню ниже! ↓");
             }
         }
-        // 2. Обработка Inline-кнопок (под сообщениями)
+        // Обработка кнопок под сообщениями
         else if (update.hasCallbackQuery()) {
             String callData = update.getCallbackQuery().getData();
             long chatId = update.getCallbackQuery().getMessage().getChatId();
             long telegramId = update.getCallbackQuery().getFrom().getId();
 
-            // Точное совпадение (меню каталога - только просмотр)
+            // Точное совпадение меню каталога - только просмотр
             switch (callData) {
                 case "CATALOG_CPU": sendCpuCatalog(chatId); break;
                 case "CATALOG_GPU": sendGpuCatalog(chatId); break;
@@ -79,7 +79,7 @@ public class PcBuilderBot extends TelegramLongPollingBot {
                 case "CATALOG_CASE": sendCaseCatalog(chatId); break;
             }
 
-            // Динамические кнопки (выбор деталей в режиме сборки)
+            // Динамические кнопки
             if (callData.startsWith("SELECT_CPU_")) {
                 long cpuId = Long.parseLong(callData.replace("SELECT_CPU_", ""));
                 handleCpuSelection(chatId, telegramId, cpuId);
@@ -90,7 +90,7 @@ public class PcBuilderBot extends TelegramLongPollingBot {
         }
     }
 
-    // --- БАЗОВЫЕ МЕТОДЫ (МЕНЮ И ПРОФИЛЬ) ---
+    // МЕНЮ И ПРОФИЛЬ
 
     private void handleStartCommand(long chatId, long telegramId, String firstName) {
         Optional<BotUser> user = botUserRepository.findByTelegramId(telegramId);
@@ -169,7 +169,7 @@ public class PcBuilderBot extends TelegramLongPollingBot {
         return btn;
     }
 
-    // --- МЕТОДЫ СБОРКИ ПК (МАСТЕР ПОДБОРА) ---
+    // МАСТЕР ПОДБОРА
 
     private void startPcAssembly(long chatId, long telegramId) {
         botUserRepository.findByTelegramId(telegramId).ifPresent(user -> {
@@ -284,7 +284,7 @@ public class PcBuilderBot extends TelegramLongPollingBot {
     }
 
 
-    // --- МЕТОДЫ КАТАЛОГА (ТОЛЬКО ТЕКСТ, БЕЗ КНОПОК ВЫБОРА) ---
+    // МЕТОДЫ КАТАЛОГА
 
     private void sendCpuCatalog(long chatId) {
         try {
@@ -376,7 +376,7 @@ public class PcBuilderBot extends TelegramLongPollingBot {
         } catch (Exception e) { sendMessage(chatId, "❌ Ошибка связи со складом: " + e.getMessage()); }
     }
 
-    // --- СЛУЖЕБНЫЕ МЕТОДЫ ОТПРАВКИ ---
+    // СЛУЖЕБНЫЕ МЕТОДЫ ОТПРАВКИ
 
     private void sendMessage(long chatId, String textToSend) {
         SendMessage message = new SendMessage();

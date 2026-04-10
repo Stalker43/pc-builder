@@ -1,4 +1,4 @@
-package com.example.demo.entity; // Твой пакет
+package com.example.demo.entity;
 
 import jakarta.persistence.*;
 import lombok.Data;
@@ -12,8 +12,8 @@ public class PcCase {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    private String name;           // Название (например, Zalman N5 MF)
-    private String formFactor;     // Максимальный размер материнки (например, ATX)
-    private String color;          // Цвет (например, Black)
+    private String name;           // Название
+    private String formFactor;     // Максимальный размер материнки
+    private String color;          // Цвет
     private double price;          // Цена
 }

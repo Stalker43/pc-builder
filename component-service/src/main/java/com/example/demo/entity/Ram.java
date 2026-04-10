@@ -1,4 +1,4 @@
-package com.example.demo.entity; // Проверь свой пакет!
+package com.example.demo.entity;
 
 import jakarta.persistence.*;
 import lombok.Data;
@@ -12,9 +12,9 @@ public class Ram {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    private String name;        // Название (например, Kingston FURY Beast)
-    private String type;        // Тип памяти (DDR4, DDR5 - для проверки совместимости)
-    private int capacity;       // Объем в ГБ (например, 16 или 32)
-    private int speed;          // Частота в МГц (например, 3200)
+    private String name;        // Название
+    private String type;        // Тип памяти (для проверки совместимости)
+    private int capacity;       // Объем в ГБ
+    private int speed;          // Частота в МГц
     private double price;       // Цена
 }

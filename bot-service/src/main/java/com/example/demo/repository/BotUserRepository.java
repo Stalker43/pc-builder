@@ -9,7 +9,7 @@ import java.util.Optional;
 @Repository
 public interface BotUserRepository extends JpaRepository<BotUser, Long> {
 
-    // Этот метод позволит нам искать пользователя по его ID в Телеграме
+
     Optional<BotUser> findByTelegramId(Long telegramId);
 
 }
