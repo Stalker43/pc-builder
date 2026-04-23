@@ -19,6 +19,11 @@ public class PsuController {
         return psuRepository.findAll();
     }
 
+    @GetMapping("/{id}")
+    public Psu getPsuById(@PathVariable Long id) {
+        return psuRepository.findById(id).orElse(null);
+    }
+
     @PostMapping
     public Psu addPsu(@RequestBody Psu psu) {
         return psuRepository.save(psu);

@@ -17,7 +17,7 @@ import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
+import java.util.Map;
 
 @Component
 public class PcBuilderBot extends TelegramLongPollingBot {
@@ -28,9 +28,10 @@ public class PcBuilderBot extends TelegramLongPollingBot {
     private final BotUserRepository botUserRepository;
     private final RestTemplate restTemplate = new RestTemplate();
 
-    // Ссылки на наши микросервисы
+    // Адреса микросервисов (порты 8081, 8082, 8083)
     private final String API_URL = "http://component-service:8081/api/";
     private final String COMPATIBILITY_API_URL = "http://compatibility-service:8082/api/compatibility/";
+    private final String POWER_API_URL = "http://power-service:8083/api/power/";
 
     public PcBuilderBot(@Value("${telegram.bot.token}") String botToken, BotUserRepository botUserRepository) {
         super(botToken);
@@ -44,122 +45,329 @@ public class PcBuilderBot extends TelegramLongPollingBot {
 
     @Override
     public void onUpdateReceived(Update update) {
-        // Обработка текстовых сообщений (нижние кнопки)
         if (update.hasMessage() && update.getMessage().hasText()) {
-            String messageText = update.getMessage().getText();
-            long chatId = update.getMessage().getChatId();
-            long telegramId = update.getMessage().getFrom().getId();
-            String firstName = update.getMessage().getChat().getFirstName();
-
-            if (messageText.equals("/start")) {
-                handleStartCommand(chatId, telegramId, firstName);
-            } else if (messageText.equals("Мой профиль 👤")) {
-                showUserProfile(chatId, telegramId);
-            } else if (messageText.equals("Собрать ПК 🛠")) {
-                startPcAssembly(chatId, telegramId);
-            } else if (messageText.equals("Каталог 📋")) {
-                showCatalogMenu(chatId);
-            } else {
-                sendMessage(chatId, "Я пока учусь понимать слова. Нажми что-нибудь из меню ниже! ↓");
-            }
-        }
-        // Обработка кнопок под сообщениями
-        else if (update.hasCallbackQuery()) {
-            String callData = update.getCallbackQuery().getData();
-            long chatId = update.getCallbackQuery().getMessage().getChatId();
-            long telegramId = update.getCallbackQuery().getFrom().getId();
-
-            // Точное совпадение меню каталога - только просмотр
-            switch (callData) {
-                case "CATALOG_CPU": sendCpuCatalog(chatId); break;
-                case "CATALOG_GPU": sendGpuCatalog(chatId); break;
-                case "CATALOG_MB":  sendMbCatalog(chatId); break;
-                case "CATALOG_RAM": sendRamCatalog(chatId); break;
-                case "CATALOG_PSU": sendPsuCatalog(chatId); break;
-                case "CATALOG_CASE": sendCaseCatalog(chatId); break;
-            }
-
-            // Динамические кнопки
-            if (callData.startsWith("SELECT_CPU_")) {
-                long cpuId = Long.parseLong(callData.replace("SELECT_CPU_", ""));
-                handleCpuSelection(chatId, telegramId, cpuId);
-            } else if (callData.startsWith("SELECT_MB_")) {
-                long mbId = Long.parseLong(callData.replace("SELECT_MB_", ""));
-                handleMbSelection(chatId, telegramId, mbId);
-            }
+            handleTextMessage(update);
+        } else if (update.hasCallbackQuery()) {
+            handleCallbackQuery(update);
         }
     }
 
-    // МЕНЮ И ПРОФИЛЬ
+    // --- ОБРАБОТКА ТЕКСТА (НИЖНЕЕ МЕНЮ) ---
 
-    private void handleStartCommand(long chatId, long telegramId, String firstName) {
-        Optional<BotUser> user = botUserRepository.findByTelegramId(telegramId);
-        String welcomeText;
-        if (user.isEmpty()) {
-            BotUser newUser = new BotUser();
-            newUser.setTelegramId(telegramId);
-            newUser.setChatId(chatId);
-            newUser.setFirstName(firstName);
-            newUser.setState("IDLE");
-            botUserRepository.save(newUser);
-            welcomeText = "Привет, " + firstName + "! 💻 Я помогу тебе собрать идеальный ПК.";
-        } else {
-            welcomeText = "С возвращением, " + firstName + "! 🚀 Готов продолжить сборку?";
-            BotUser existingUser = user.get();
-            existingUser.setState("IDLE");
-            botUserRepository.save(existingUser);
+    private void handleTextMessage(Update update) {
+        long chatId = update.getMessage().getChatId();
+        long telegramId = update.getMessage().getFrom().getId();
+        String text = update.getMessage().getText();
+        String name = update.getMessage().getChat().getFirstName();
+
+        switch (text) {
+            case "/start": initUser(chatId, telegramId, name); break;
+            case "Мой профиль 👤": showProfile(chatId, telegramId); break;
+            case "Собрать ПК 🛠": startAssembly(chatId, telegramId); break;
+            case "Каталог 📋": enterCatalog(chatId, telegramId); break;
+            default: sendMsg(chatId, "🤖 Пожалуйста, используй кнопки меню ниже!");
         }
-        sendMenuMessage(chatId, welcomeText);
     }
 
-    private void showUserProfile(long chatId, long telegramId) {
-        botUserRepository.findByTelegramId(telegramId).ifPresentOrElse(
-                u -> sendMessage(chatId, "Твой профиль:\n👤 Имя: " + u.getFirstName() + "\n🆔 ID: " + u.getTelegramId()),
-                () -> sendMessage(chatId, "Профиль не найден 🤷‍♂️")
-        );
+    // --- ОБРАБОТКА НАЖАТИЙ INLINE-КНОПОК ---
+
+    private void handleCallbackQuery(Update update) {
+        String callData = update.getCallbackQuery().getData();
+        long chatId = update.getCallbackQuery().getMessage().getChatId();
+        long telegramId = update.getCallbackQuery().getFrom().getId();
+
+        BotUser user = botUserRepository.findByTelegramId(telegramId).orElse(null);
+        if (user == null) return;
+
+        if (callData.startsWith("CATALOG_")) {
+            handleCatalogCategory(chatId, callData);
+        }
+        else if (callData.startsWith("BUY_")) {
+            handleQuickBuy(chatId, user, callData);
+        }
+        else if (callData.startsWith("SELECT_")) {
+            // ЗАЩИТА: Строгая проверка этапа сборки (Машина состояний)
+            if (!isCorrectStepForState(user.getState(), callData)) {
+                sendMsg(chatId, "⚠️ *Кнопка неактивна!*\n\nВы пытаетесь выбрать деталь не по порядку или нажали на старую кнопку.\nНажмите **'Собрать ПК 🛠'** внизу экрана, чтобы начать новую сборку!");
+                return;
+            }
+            handleAssemblyStep(chatId, user, callData);
+        }
     }
 
-    private void sendMenuMessage(long chatId, String text) {
-        SendMessage message = new SendMessage();
-        message.setChatId(String.valueOf(chatId));
-        message.setText(text);
+    // --- ВАЛИДАТОР СОСТОЯНИЙ (ЗАЩИТА ОТ СТАРЫХ КНОПОК) ---
 
-        ReplyKeyboardMarkup keyboardMarkup = new ReplyKeyboardMarkup();
-        List<KeyboardRow> keyboard = new ArrayList<>();
-        KeyboardRow row1 = new KeyboardRow(); row1.add("Собрать ПК 🛠");
-        KeyboardRow row2 = new KeyboardRow(); row2.add("Каталог 📋"); row2.add("Мой профиль 👤");
-        keyboard.add(row1); keyboard.add(row2);
+    public boolean isCorrectStepForState(String currentState, String callData) {
+        if (currentState == null || currentState.equals("IDLE")) return false;
 
-        keyboardMarkup.setKeyboard(keyboard);
-        keyboardMarkup.setResizeKeyboard(true);
-        message.setReplyMarkup(keyboardMarkup);
-        executeMessage(message);
+        if (callData.startsWith("SELECT_CPU_") && currentState.equals("CHOOSING_CPU")) return true;
+        if (callData.startsWith("SELECT_MB_") && currentState.equals("CHOOSING_MB")) return true;
+        if (callData.startsWith("SELECT_RAM_") && currentState.equals("CHOOSING_RAM")) return true;
+        if (callData.startsWith("SELECT_GPU_") && currentState.equals("CHOOSING_GPU")) return true;
+        if (callData.startsWith("SELECT_PSU_") && currentState.equals("CHOOSING_PSU")) return true;
+        if (callData.startsWith("SELECT_CASE_") && currentState.equals("CHOOSING_CASE")) return true;
+
+        return false;
     }
 
-    private void showCatalogMenu(long chatId) {
-        SendMessage message = new SendMessage();
-        message.setChatId(String.valueOf(chatId));
-        message.setText("Выбери категорию комплектующих: 🔎");
+    // --- 1. ЛОГИКА КАТАЛОГА (ПРОСТО ПОКУПКА) ---
 
-        InlineKeyboardMarkup markupInline = new InlineKeyboardMarkup();
-        List<List<InlineKeyboardButton>> rowsInline = new ArrayList<>();
+    private void enterCatalog(long chatId, long telegramId) {
+        botUserRepository.findByTelegramId(telegramId).ifPresent(user -> {
+            user.setState("IDLE"); // Сброс сборки при входе в каталог
+            botUserRepository.save(user);
+            sendMenu(chatId, "📋 *КАТАЛОГ* 📋\n\nЗдесь можно купить отдельные детали без проверок совместимости. Выбери категорию:");
+        });
+    }
 
-        List<InlineKeyboardButton> row1 = new ArrayList<>();
-        row1.add(createBtn("Процессоры 🧠", "CATALOG_CPU"));
-        row1.add(createBtn("Материнки 🎛", "CATALOG_MB"));
+    private void handleCatalogCategory(long chatId, String data) {
+        String[] parts = data.split("_");
+        String type = parts[1].toLowerCase() + "s"; // cpus, gpus, cases...
+        if (type.equals("mbs")) type = "motherboards";
 
-        List<InlineKeyboardButton> row2 = new ArrayList<>();
-        row2.add(createBtn("Видеокарты 🎮", "CATALOG_GPU"));
-        row2.add(createBtn("Оперативка ⚡", "CATALOG_RAM"));
+        fetchAndSendList(chatId, API_URL + type, "BUY_" + parts[1] + "_", "📦 Доступные модели на складе:");
+    }
 
-        List<InlineKeyboardButton> row3 = new ArrayList<>();
-        row3.add(createBtn("Блоки питания 🔋", "CATALOG_PSU"));
-        row3.add(createBtn("Корпуса 📦", "CATALOG_CASE"));
+    private void handleQuickBuy(long chatId, BotUser user, String data) {
+        long id = Long.parseLong(data.substring(data.lastIndexOf("_") + 1));
 
-        rowsInline.add(row1); rowsInline.add(row2); rowsInline.add(row3);
-        markupInline.setKeyboard(rowsInline);
-        message.setReplyMarkup(markupInline);
-        executeMessage(message);
+        if (data.contains("CPU")) user.setSelectedCpuId(id);
+        else if (data.contains("MB")) user.setSelectedMbId(id);
+        else if (data.contains("RAM")) user.setSelectedRamId(id);
+        else if (data.contains("GPU")) user.setSelectedGpuId(id);
+        else if (data.contains("PSU")) user.setSelectedPsuId(id);
+        else if (data.contains("CASE")) user.setSelectedCaseId(id);
+
+        botUserRepository.save(user);
+        sendMsg(chatId, "🛒 *Товар успешно добавлен в корзину!*\nМожешь выбрать что-то еще в каталоге.");
+    }
+
+    // --- 2. МАСТЕР СБОРКИ (ПО ШАГАМ С ПРОВЕРКАМИ) ---
+
+    private void startAssembly(long chatId, long telegramId) {
+        botUserRepository.findByTelegramId(telegramId).ifPresent(user -> {
+            user.setState("CHOOSING_CPU");
+            // Полная очистка корзины для новой сборки
+            user.setSelectedCpuId(null); user.setSelectedMbId(null); user.setSelectedRamId(null);
+            user.setSelectedGpuId(null); user.setSelectedPsuId(null); user.setSelectedCaseId(null);
+            botUserRepository.save(user);
+
+            sendMsg(chatId, "🛠 *Запуск Мастера Сборки!*\n\n💡 *СОВЕТ:* Начинаем с процессора. От него будет зависеть выбор материнской платы.");
+            fetchAndSendList(chatId, API_URL + "cpus", "SELECT_CPU_", "🧠 Выбери процессор:");
+        });
+    }
+
+    private void handleAssemblyStep(long chatId, BotUser user, String data) {
+        long id = Long.parseLong(data.substring(data.lastIndexOf("_") + 1));
+
+        if (data.startsWith("SELECT_CPU_")) {
+            user.setSelectedCpuId(id); user.setState("CHOOSING_MB"); botUserRepository.save(user);
+            sendMsg(chatId, "✅ *Процессор выбран!*\n\n💡 *РЕКОМЕНДАЦИЯ:* Я отфильтровал материнские платы. Выбирай ту, что подходит под твой сокет.");
+            fetchAndSendList(chatId, COMPATIBILITY_API_URL + "motherboards?cpuId=" + id, "SELECT_MB_", "🎛 Совместимые материнские платы:");
+        }
+        else if (data.startsWith("SELECT_MB_")) {
+            user.setSelectedMbId(id); user.setState("CHOOSING_RAM"); botUserRepository.save(user);
+            sendMsg(chatId, "✅ *Плата добавлена!*\n\n💡 *РЕКОМЕНДАЦИЯ:* Выбираем ОЗУ. Поколение памяти (например, DDR4 или DDR5) должно строго совпадать.");
+            fetchAndSendList(chatId, COMPATIBILITY_API_URL + "rams?mbId=" + id, "SELECT_RAM_", "⚡ Подходящая оперативная память:");
+        }
+        else if (data.startsWith("SELECT_RAM_")) {
+            user.setSelectedRamId(id); user.setState("CHOOSING_GPU"); botUserRepository.save(user);
+            sendMsg(chatId, "✅ *Память в корзине!*\n\n💡 *РЕКОМЕНДАЦИЯ:* Видеокарта — главная деталь для FPS в играх. Выбирай мощнее!");
+            fetchAndSendList(chatId, API_URL + "gpus", "SELECT_GPU_", "🎮 Доступные видеокарты:");
+        }
+        else if (data.startsWith("SELECT_GPU_")) {
+            user.setSelectedGpuId(id); user.setState("CHOOSING_PSU"); botUserRepository.save(user);
+            sendMsg(chatId, "✅ *Видеокарта установлена!*\n\n⏳ *Связываюсь с power-service...*\nСчитаем энергопотребление CPU и GPU для подбора Блока Питания.");
+            processPowerAndPsuStep(chatId, user.getSelectedCpuId(), id);
+        }
+        else if (data.startsWith("SELECT_PSU_")) {
+            user.setSelectedPsuId(id); user.setState("CHOOSING_CASE"); botUserRepository.save(user);
+            sendMsg(chatId, "✅ *Блок питания готов!*\n\n💡 *РЕКОМЕНДАЦИЯ:* Последний штрих — выбрать красивый и вместительный корпус.");
+            fetchAndSendList(chatId, API_URL + "cases", "SELECT_CASE_", "📦 Выбери корпус:");
+        }
+        else if (data.startsWith("SELECT_CASE_")) {
+            user.setSelectedCaseId(id); user.setState("IDLE"); botUserRepository.save(user);
+            sendMsg(chatId, "🎉 *УРА! СБОРКА ПОЛНОСТЬЮ ЗАВЕРШЕНА!* 🎉\n\nВсе детали успешно подобраны и сохранены. Загляни в 'Мой профиль 👤', чтобы посмотреть результат.");
+        }
+        else if (data.startsWith("SELECT_CASE_")) {
+            user.setSelectedCaseId(id);
+            user.setState("IDLE");
+            botUserRepository.save(user);
+
+            // ФИНАЛ: Отправляем всю сборку в assembly-service (Порт 8084)
+            try {
+                String assemblyUrl = "http://assembly-service:8084/api/assembly/save";
+                restTemplate.postForObject(assemblyUrl, user, String.class);
+
+                sendMsg(chatId, "🎉 *УРА! СБОРКА ПОЛНОСТЬЮ ЗАВЕРШЕНА!* 🎉\n\nВсе детали успешно подобраны и сохранены на главном сервере. Загляни в 'Мой профиль 👤', чтобы посмотреть результат.");
+            } catch (Exception e) {
+                sendMsg(chatId, "🎉 Сборка завершена локально!\n⚠️ *Но микросервис assembly-service сейчас недоступен*, поэтому в историю она не попала.");
+                System.err.println("Ошибка отправки в assembly-service: " + e.getMessage());
+            }
+        }
+    }
+
+    // --- 3. ИНТЕГРАЦИЯ С POWER-SERVICE ---
+
+    private void processPowerAndPsuStep(long chatId, Long cpuId, long gpuId) {
+        try {
+            // 1. Узнаем ватты (Идем в power-service на порт 8083)
+            String url = POWER_API_URL + "calculate?cpuId=" + cpuId + "&gpuId=" + gpuId;
+            PowerResponseDto power = restTemplate.getForObject(url, PowerResponseDto.class);
+
+            int minWatt = (power != null && power.getRequiredWattage() != null) ? power.getRequiredWattage() : 0;
+            String advice = (power != null && power.getRecommendation() != null) ? power.getRecommendation() : "Расчет выполнен.";
+
+            sendMsg(chatId, "📊 *Инженерный отчет:*\n• Минимальная мощность: `" + minWatt + "W`\n• Вердикт: _" + advice + "_");
+
+            // 2. Получаем все БП со склада (Порт 8081)
+            PsuDto[] allPsus = restTemplate.getForObject(API_URL + "psus", PsuDto[].class);
+            if (allPsus == null || allPsus.length == 0) {
+                sendMsg(chatId, "❌ Блоков питания нет на складе.");
+                return;
+            }
+
+            // 3. Отбираем только те, что выдержат нагрузку
+            InlineKeyboardMarkup markup = new InlineKeyboardMarkup();
+            List<List<InlineKeyboardButton>> rows = new ArrayList<>();
+
+            for (PsuDto psu : allPsus) {
+                if (psu.getWattage() >= minWatt) {
+                    rows.add(List.of(createBtn(psu.getName() + " (" + psu.getWattage() + "W) | $" + psu.getPrice(), "SELECT_PSU_" + psu.getId())));
+                }
+            }
+
+            if (rows.isEmpty()) {
+                sendMsg(chatId, "⚠️ На складе нет достаточно мощных БП для твоей системы!");
+                return;
+            }
+
+            markup.setKeyboard(rows);
+            SendMessage msg = new SendMessage(String.valueOf(chatId), "🔋 Рекомендуемые блоки питания:");
+            msg.setReplyMarkup(markup);
+            msg.setParseMode("Markdown");
+            execute(msg);
+
+        } catch (Exception e) {
+            sendMsg(chatId, "❌ Ошибка при расчете мощности. Проверьте логи микросервисов.");
+            e.printStackTrace();
+        }
+    }
+
+    // --- УНИВЕРСАЛЬНЫЕ МЕТОДЫ-ПОМОЩНИКИ ---
+
+    private void fetchAndSendList(long chatId, String url, String btnPrefix, String headerMsg) {
+        try {
+            Object[] items = restTemplate.getForObject(url, Object[].class);
+            if (items == null || items.length == 0) {
+                sendMsg(chatId, "📦 Склад пуст. Возвращайтесь позже.");
+                return;
+            }
+
+            InlineKeyboardMarkup markup = new InlineKeyboardMarkup();
+            List<List<InlineKeyboardButton>> rows = new ArrayList<>();
+            for (Object item : items) {
+                Map<String, Object> map = (Map<String, Object>) item;
+                String btnText = map.get("name") + " | $" + map.get("price");
+                rows.add(List.of(createBtn(btnText, btnPrefix + map.get("id"))));
+            }
+
+            markup.setKeyboard(rows);
+            SendMessage msg = new SendMessage(String.valueOf(chatId), headerMsg);
+            msg.setReplyMarkup(markup);
+            msg.setParseMode("Markdown");
+            execute(msg);
+
+        } catch (Exception e) {
+            sendMsg(chatId, "❌ Ошибка загрузки списка деталей.");
+        }
+    }
+
+    private void initUser(long chatId, long telegramId, String name) {
+        BotUser user = botUserRepository.findByTelegramId(telegramId).orElseGet(BotUser::new);
+        user.setTelegramId(telegramId);
+        user.setChatId(chatId);
+        user.setFirstName(name);
+        user.setState("IDLE");
+        botUserRepository.save(user);
+        sendMenu(chatId, "👋 Привет, " + name + "! Я твой личный помощник-инженер.\nВыбери нужный раздел в меню ниже:");
+    }
+
+    private void showProfile(long chatId, long telegramId) {
+        botUserRepository.findByTelegramId(telegramId).ifPresent(u -> {
+            if (u.getSelectedCpuId() == null) {
+                sendMsg(chatId, "👤 *Профиль:* " + u.getFirstName() + "\n\nУ тебя пока нет сохраненных сборок. Нажми **'Собрать ПК 🛠'**, чтобы начать!");
+                return;
+            }
+
+            try {
+                // Запрашиваем детали со склада
+                Map cpu = restTemplate.getForObject(API_URL + "cpus/" + u.getSelectedCpuId(), Map.class);
+                Map mb = restTemplate.getForObject(API_URL + "motherboards/" + u.getSelectedMbId(), Map.class);
+                Map ram = restTemplate.getForObject(API_URL + "rams/" + u.getSelectedRamId(), Map.class);
+                Map gpu = restTemplate.getForObject(API_URL + "gpus/" + u.getSelectedGpuId(), Map.class);
+                Map psu = restTemplate.getForObject(API_URL + "psus/" + u.getSelectedPsuId(), Map.class);
+                Map pcCase = restTemplate.getForObject(API_URL + "cases/" + u.getSelectedCaseId(), Map.class);
+
+                // Безопасное суммирование цен
+                double total = 0;
+                total += Double.parseDouble(cpu.get("price").toString());
+                total += Double.parseDouble(mb.get("price").toString());
+                total += Double.parseDouble(ram.get("price").toString());
+                total += Double.parseDouble(gpu.get("price").toString());
+                total += Double.parseDouble(psu.get("price").toString());
+                total += Double.parseDouble(pcCase.get("price").toString());
+
+                String report = "👤 *ТВОЯ ПОСЛЕДНЯЯ СБОРКА* 👤\n\n" +
+                        "🧠 *Процессор:* " + cpu.get("name") + " ($" + cpu.get("price") + ")\n" +
+                        "🎛 *Плата:* " + mb.get("name") + " ($" + mb.get("price") + ")\n" +
+                        "⚡ *ОЗУ:* " + ram.get("name") + " ($" + ram.get("price") + ")\n" +
+                        "🎮 *Видеокарта:* " + gpu.get("name") + " ($" + gpu.get("price") + ")\n" +
+                        "🔋 *БП:* " + psu.get("name") + " ($" + psu.get("price") + ")\n" +
+                        "📦 *Корпус:* " + pcCase.get("name") + " ($" + pcCase.get("price") + ")\n\n" +
+                        "💰 *ИТОГО:* `$" + String.format("%.2f", total) + "`";
+
+                sendMsg(chatId, report);
+
+            } catch (Exception e) {
+                sendMsg(chatId, "❌ Ошибка при загрузке деталей профиля. Убедись, что методы поиска по ID добавлены во все контроллеры.");
+                e.printStackTrace(); // Выведет точную ошибку в консоль докера
+            }
+        });
+    }
+
+    private void sendMenu(long chatId, String text) {
+        SendMessage msg = new SendMessage(String.valueOf(chatId), text);
+
+        ReplyKeyboardMarkup kb = new ReplyKeyboardMarkup();
+        kb.setKeyboard(List.of(
+                new KeyboardRow(List.of(new org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.KeyboardButton("Собрать ПК 🛠"))),
+                new KeyboardRow(List.of(
+                        new org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.KeyboardButton("Каталог 📋"),
+                        new org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.KeyboardButton("Мой профиль 👤")
+                ))
+        ));
+        kb.setResizeKeyboard(true);
+        msg.setReplyMarkup(kb);
+        msg.setParseMode("Markdown");
+
+        // Если текст содержит слово КАТАЛОГ, прикрепляем inline-кнопки
+        if (text.contains("КАТАЛОГ")) {
+            InlineKeyboardMarkup inlineKb = new InlineKeyboardMarkup();
+            inlineKb.setKeyboard(List.of(
+                    List.of(createBtn("Процессоры 🧠", "CATALOG_CPU"), createBtn("Материнки 🎛", "CATALOG_MB")),
+                    List.of(createBtn("Видеокарты 🎮", "CATALOG_GPU"), createBtn("Оперативка ⚡", "CATALOG_RAM")),
+                    List.of(createBtn("Блоки питания 🔋", "CATALOG_PSU"), createBtn("Корпуса 📦", "CATALOG_CASE"))
+            ));
+            msg.setReplyMarkup(inlineKb);
+        }
+        try { execute(msg); } catch (TelegramApiException ignored) {}
+    }
+
+    private void sendMsg(long chatId, String text) {
+        SendMessage msg = new SendMessage(String.valueOf(chatId), text);
+        msg.setParseMode("Markdown");
+        try { execute(msg); } catch (TelegramApiException ignored) {}
     }
 
     private InlineKeyboardButton createBtn(String text, String callback) {
@@ -167,229 +375,5 @@ public class PcBuilderBot extends TelegramLongPollingBot {
         btn.setText(text);
         btn.setCallbackData(callback);
         return btn;
-    }
-
-    // МАСТЕР ПОДБОРА
-
-    private void startPcAssembly(long chatId, long telegramId) {
-        botUserRepository.findByTelegramId(telegramId).ifPresent(user -> {
-            user.setState("CHOOSING_CPU");
-            botUserRepository.save(user);
-
-            String adviceText = "🛠 Отлично, начинаем сборку!\n\n" +
-                    "💡 *СОВЕТ ОТ БОТА:*\n" +
-                    "Сердце компьютера — процессор. От него зависит, насколько быстро будут компилироваться программы и работать тяжелые приложения.\n" +
-                    "• Для базовых задач и легких игр хватит 4-6 ядер.\n" +
-                    "• Для программирования, работы с виртуалками и современных игр бери 6-8 ядер.\n" +
-                    "• Для экстремальных нагрузок смотри на Core i9.\n\n" +
-                    "Подожди секунду, загружаю список с нашего склада...";
-
-            sendMessage(chatId, adviceText);
-            sendCpuSelectionStep(chatId);
-        });
-    }
-
-    private void sendCpuSelectionStep(long chatId) {
-        try {
-            CpuDto[] items = restTemplate.getForObject(API_URL + "cpus", CpuDto[].class);
-            if (items == null || items.length == 0) {
-                sendMessage(chatId, "📦 Процессоров пока нет на складе. Сборка невозможна.");
-                return;
-            }
-
-            SendMessage message = new SendMessage();
-            message.setChatId(String.valueOf(chatId));
-            message.setText("📦 Выбери процессор для своей сборки:");
-
-            InlineKeyboardMarkup markupInline = new InlineKeyboardMarkup();
-            List<List<InlineKeyboardButton>> rowsInline = new ArrayList<>();
-
-            for (CpuDto item : items) {
-                List<InlineKeyboardButton> row = new ArrayList<>();
-                InlineKeyboardButton btn = new InlineKeyboardButton();
-                btn.setText(item.getName() + " | $" + item.getPrice());
-                btn.setCallbackData("SELECT_CPU_" + item.getId());
-                row.add(btn);
-                rowsInline.add(row);
-            }
-
-            markupInline.setKeyboard(rowsInline);
-            message.setReplyMarkup(markupInline);
-            executeMessage(message);
-
-        } catch (Exception e) {
-            sendMessage(chatId, "❌ Ошибка связи со складом: " + e.getMessage());
-        }
-    }
-
-    private void handleCpuSelection(long chatId, long telegramId, long cpuId) {
-        botUserRepository.findByTelegramId(telegramId).ifPresent(user -> {
-            user.setSelectedCpuId(cpuId);
-            user.setState("CHOOSING_MB");
-            botUserRepository.save(user);
-
-            sendMessage(chatId, "✅ Отличный выбор! Процессор сохранен.\n\n" +
-                    "💡 *СЛЕДУЮЩИЙ ШАГ: Материнская плата*\n" +
-                    "Служба совместимости уже отфильтровала каталог. Вот платы с подходящим сокетом:");
-
-            sendMbSelectionStep(chatId, cpuId);
-        });
-    }
-
-    private void sendMbSelectionStep(long chatId, long cpuId) {
-        try {
-            String url = COMPATIBILITY_API_URL + "motherboards?cpuId=" + cpuId;
-            MotherboardDto[] items = restTemplate.getForObject(url, MotherboardDto[].class);
-
-            if (items == null || items.length == 0) {
-                sendMessage(chatId, "❌ К сожалению, на складе сейчас нет подходящих материнских плат для этого процессора.");
-                return;
-            }
-
-            SendMessage message = new SendMessage();
-            message.setChatId(String.valueOf(chatId));
-            message.setText("🎛 Совместимые материнские платы:");
-
-            InlineKeyboardMarkup markupInline = new InlineKeyboardMarkup();
-            List<List<InlineKeyboardButton>> rowsInline = new ArrayList<>();
-
-            for (MotherboardDto item : items) {
-                List<InlineKeyboardButton> row = new ArrayList<>();
-                InlineKeyboardButton btn = new InlineKeyboardButton();
-                btn.setText(item.getName() + " | " + item.getSocket() + " | $" + item.getPrice());
-                btn.setCallbackData("SELECT_MB_" + item.getId());
-                row.add(btn);
-                rowsInline.add(row);
-            }
-
-            markupInline.setKeyboard(rowsInline);
-            message.setReplyMarkup(markupInline);
-            executeMessage(message);
-
-        } catch (Exception e) {
-            sendMessage(chatId, "❌ Ошибка связи со Службой Совместимости: " + e.getMessage());
-        }
-    }
-
-    private void handleMbSelection(long chatId, long telegramId, long mbId) {
-        botUserRepository.findByTelegramId(telegramId).ifPresent(user -> {
-            user.setSelectedMbId(mbId);
-            user.setState("CHOOSING_RAM");
-            botUserRepository.save(user);
-
-            sendMessage(chatId, "✅ Материнская плата успешно добавлена в сборку!\n\n" +
-                    "💡 *СЛЕДУЮЩИЙ ШАГ: Оперативная память*\n" +
-                    "Скоро здесь будет подбор памяти по стандарту (DDR4/DDR5) 🚧");
-        });
-    }
-
-
-    // МЕТОДЫ КАТАЛОГА
-
-    private void sendCpuCatalog(long chatId) {
-        try {
-            CpuDto[] items = restTemplate.getForObject(API_URL + "cpus", CpuDto[].class);
-            if (items == null || items.length == 0) { sendMessage(chatId, "📦 Процессоров пока нет на складе."); return; }
-
-            StringBuilder sb = new StringBuilder("📦 Доступные процессоры:\n\n");
-            for (CpuDto item : items) {
-                sb.append("🔹 ").append(item.getName()).append("\n")
-                        .append("   ⚙️ Сокет: ").append(item.getSocket()).append(" | 🧠 Ядра: ").append(item.getCores()).append("\n")
-                        .append("   💰 Цена: $").append(item.getPrice()).append("\n\n");
-            }
-            sendMessage(chatId, sb.toString());
-        } catch (Exception e) { sendMessage(chatId, "❌ Ошибка связи со складом: " + e.getMessage()); }
-    }
-
-    private void sendGpuCatalog(long chatId) {
-        try {
-            GpuDto[] items = restTemplate.getForObject(API_URL + "gpus", GpuDto[].class);
-            if (items == null || items.length == 0) { sendMessage(chatId, "📦 Видеокарт пока нет на складе."); return; }
-
-            StringBuilder sb = new StringBuilder("📦 Доступные видеокарты:\n\n");
-            for (GpuDto item : items) {
-                sb.append("🔹 ").append(item.getName()).append("\n")
-                        .append("   🎮 Память: ").append(item.getMemory()).append(" GB | ⚡ Требует БП: ").append(item.getPowerRequired()).append(" Вт\n")
-                        .append("   💰 Цена: $").append(item.getPrice()).append("\n\n");
-            }
-            sendMessage(chatId, sb.toString());
-        } catch (Exception e) { sendMessage(chatId, "❌ Ошибка связи со складом: " + e.getMessage()); }
-    }
-
-    private void sendMbCatalog(long chatId) {
-        try {
-            MotherboardDto[] items = restTemplate.getForObject(API_URL + "motherboards", MotherboardDto[].class);
-            if (items == null || items.length == 0) { sendMessage(chatId, "📦 Материнских плат пока нет на складе."); return; }
-
-            StringBuilder sb = new StringBuilder("📦 Доступные материнские платы:\n\n");
-            for (MotherboardDto item : items) {
-                sb.append("🔹 ").append(item.getName()).append("\n")
-                        .append("   ⚙️ Сокет: ").append(item.getSocket()).append(" | 📏 Форм-фактор: ").append(item.getFormFactor()).append("\n")
-                        .append("   💰 Цена: $").append(item.getPrice()).append("\n\n");
-            }
-            sendMessage(chatId, sb.toString());
-        } catch (Exception e) { sendMessage(chatId, "❌ Ошибка связи со складом: " + e.getMessage()); }
-    }
-
-    private void sendRamCatalog(long chatId) {
-        try {
-            RamDto[] items = restTemplate.getForObject(API_URL + "rams", RamDto[].class);
-            if (items == null || items.length == 0) { sendMessage(chatId, "📦 Оперативной памяти пока нет на складе."); return; }
-
-            StringBuilder sb = new StringBuilder("📦 Доступная оперативная память:\n\n");
-            for (RamDto item : items) {
-                sb.append("🔹 ").append(item.getName()).append("\n")
-                        .append("   ⚡ Тип: ").append(item.getType()).append(" | 💾 Объем: ").append(item.getCapacity()).append(" GB\n")
-                        .append("   💰 Цена: $").append(item.getPrice()).append("\n\n");
-            }
-            sendMessage(chatId, sb.toString());
-        } catch (Exception e) { sendMessage(chatId, "❌ Ошибка связи со складом: " + e.getMessage()); }
-    }
-
-    private void sendPsuCatalog(long chatId) {
-        try {
-            PsuDto[] items = restTemplate.getForObject(API_URL + "psus", PsuDto[].class);
-            if (items == null || items.length == 0) { sendMessage(chatId, "📦 Блоков питания пока нет на складе."); return; }
-
-            StringBuilder sb = new StringBuilder("📦 Доступные блоки питания:\n\n");
-            for (PsuDto item : items) {
-                sb.append("🔹 ").append(item.getName()).append("\n")
-                        .append("   🔋 Мощность: ").append(item.getWattage()).append(" Вт\n")
-                        .append("   💰 Цена: $").append(item.getPrice()).append("\n\n");
-            }
-            sendMessage(chatId, sb.toString());
-        } catch (Exception e) { sendMessage(chatId, "❌ Ошибка связи со складом: " + e.getMessage()); }
-    }
-
-    private void sendCaseCatalog(long chatId) {
-        try {
-            PcCaseDto[] items = restTemplate.getForObject(API_URL + "pccases", PcCaseDto[].class);
-            if (items == null || items.length == 0) { sendMessage(chatId, "📦 Корпусов пока нет на складе."); return; }
-
-            StringBuilder sb = new StringBuilder("📦 Доступные корпуса:\n\n");
-            for (PcCaseDto item : items) {
-                sb.append("🔹 ").append(item.getName()).append("\n")
-                        .append("   📏 Форм-фактор: ").append(item.getFormFactor()).append("\n")
-                        .append("   💰 Цена: $").append(item.getPrice()).append("\n\n");
-            }
-            sendMessage(chatId, sb.toString());
-        } catch (Exception e) { sendMessage(chatId, "❌ Ошибка связи со складом: " + e.getMessage()); }
-    }
-
-    // СЛУЖЕБНЫЕ МЕТОДЫ ОТПРАВКИ
-
-    private void sendMessage(long chatId, String textToSend) {
-        SendMessage message = new SendMessage();
-        message.setChatId(String.valueOf(chatId));
-        message.setText(textToSend);
-        executeMessage(message);
-    }
-
-    private void executeMessage(SendMessage message) {
-        try {
-            execute(message);
-        } catch (TelegramApiException e) {
-            System.out.println("Ошибка отправки сообщения: " + e.getMessage());
-        }
     }
 }

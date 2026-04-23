@@ -19,6 +19,11 @@ public class MotherboardController {
         return motherboardRepository.findAll();
     }
 
+    @GetMapping("/{id}")
+    public Motherboard getMotherboardById(@PathVariable Long id) {
+        return motherboardRepository.findById(id).orElse(null);
+    }
+
     @PostMapping
     public Motherboard addMotherboard(@RequestBody Motherboard motherboard) {
         return motherboardRepository.save(motherboard);

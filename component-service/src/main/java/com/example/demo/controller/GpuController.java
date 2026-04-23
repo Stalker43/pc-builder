@@ -14,9 +14,16 @@ public class GpuController {
 
     private final GpuRepository gpuRepository;
 
+    // Для кнопок в боте
     @GetMapping
     public List<Gpu> getAllGpus() {
         return gpuRepository.findAll();
+    }
+
+    // Для калькулятора мощности
+    @GetMapping("/{id}")
+    public Gpu getGpuById(@PathVariable Long id) {
+        return gpuRepository.findById(id).orElse(null);
     }
 
     @PostMapping

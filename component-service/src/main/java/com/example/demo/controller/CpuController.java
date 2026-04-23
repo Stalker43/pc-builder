@@ -14,9 +14,16 @@ public class CpuController {
 
     private final CpuRepository cpuRepository;
 
+    // ТВОЙ СТАРЫЙ МЕТОД (Оставляем! Он нужен для каталога)
     @GetMapping
     public List<Cpu> getAllCpus() {
         return cpuRepository.findAll();
+    }
+
+    // НОВЫЙ МЕТОД (Добавляем! Он нужен для power-service)
+    @GetMapping("/{id}")
+    public Cpu getCpuById(@PathVariable Long id) {
+        return cpuRepository.findById(id).orElse(null);
     }
 
     @PostMapping

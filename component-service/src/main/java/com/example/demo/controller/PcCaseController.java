@@ -8,7 +8,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/pccases")
+@RequestMapping("/api/cases")
 @RequiredArgsConstructor
 public class PcCaseController {
 
@@ -17,6 +17,11 @@ public class PcCaseController {
     @GetMapping
     public List<PcCase> getAllCases() {
         return pcCaseRepository.findAll();
+    }
+
+    @GetMapping("/{id}")
+    public PcCase getCaseById(@PathVariable Long id) {
+        return pcCaseRepository.findById(id).orElse(null); // замени caseRepository на название твоего репозитория
     }
 
     @PostMapping

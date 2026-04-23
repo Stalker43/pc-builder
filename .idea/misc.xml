@@ -7,6 +7,8 @@
         <option value="$PROJECT_DIR$/component-service/pom.xml" />
         <option value="$PROJECT_DIR$/bot-service/pom.xml" />
         <option value="$PROJECT_DIR$/compatibility-service/pom.xml" />
+        <option value="$PROJECT_DIR$/power-service/pom.xml" />
+        <option value="$PROJECT_DIR$/assembly-service/pom.xml" />
       </list>
     </option>
   </component>
