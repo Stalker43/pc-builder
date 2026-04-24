@@ -14,19 +14,19 @@ class BotStateMachineTest {
     @Mock
     private BotUserRepository botUserRepository;
 
-    // Внедряем моки (заглушки) в нашего бота
+
     @InjectMocks
     private PcBuilderBot bot;
 
     @BeforeEach
     void setUp() {
-        // Инициализируем моки перед каждым тестом
+
         MockitoAnnotations.openMocks(this);
     }
 
     @Test
     void testValidStateTransitions() {
-        // Проверяем правильные переходы (Должно быть true)
+
         Assertions.assertTrue(bot.isCorrectStepForState("CHOOSING_CPU", "SELECT_CPU_1"));
         Assertions.assertTrue(bot.isCorrectStepForState("CHOOSING_MB", "SELECT_MB_2"));
         Assertions.assertTrue(bot.isCorrectStepForState("CHOOSING_GPU", "SELECT_GPU_3"));
@@ -34,12 +34,12 @@ class BotStateMachineTest {
 
     @Test
     void testInvalidStateTransitions() {
-        // Проверяем защиту от старых кнопок (Должно быть false)
+
 
         // Пытаемся выбрать процессор, когда бот ждет видеокарту
         Assertions.assertFalse(bot.isCorrectStepForState("CHOOSING_GPU", "SELECT_CPU_1"));
 
-        // Пытаемся выбрать деталь, находясь в каталоге (IDLE)
+        // Пытаемся выбрать деталь, находясь в каталоге
         Assertions.assertFalse(bot.isCorrectStepForState("IDLE", "SELECT_RAM_1"));
 
         // Пытаемся выбрать материнку, когда ждем блок питания

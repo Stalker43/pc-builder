@@ -14,13 +14,13 @@ import org.telegram.telegrambots.meta.TelegramBotsApi;
 import java.util.Optional;
 
 @SpringBootTest
-@ActiveProfiles("test") // Используем тестовый профиль (например, с in-memory базой H2)
+@ActiveProfiles("test")
 class BotIntegrationTest {
-    // Заглушка 1: Отключаем API Телеграма
+
     @MockitoBean
     private TelegramBotsApi telegramBotsApi;
 
-    // Заглушка 2: Отключаем инициализацию самого бота (чтобы BotConfig не ругался)
+
     @MockitoBean
     private PcBuilderBot pcBuilderBot;
 
@@ -29,7 +29,7 @@ class BotIntegrationTest {
 
     @Test
     void testFullAssemblyCycleInDatabase() {
-        // 1. Имитация команды /start (Пользователь зашел в бота)
+        // Имитация команды /start
         BotUser testUser = new BotUser();
         testUser.setTelegramId(123456789L);
         testUser.setFirstName("Test Student");
@@ -41,12 +41,12 @@ class BotIntegrationTest {
         Assertions.assertTrue(savedUserOpt.isPresent());
         BotUser savedUser = savedUserOpt.get();
 
-        // 2. Имитация нажатия "Собрать ПК"
+        // Имитация нажатия "Собрать ПК"
         savedUser.setState("CHOOSING_CPU");
         userRepository.save(savedUser);
         Assertions.assertEquals("CHOOSING_CPU", userRepository.findByTelegramId(123456789L).get().getState());
 
-        // 3. Имитация выбора деталей по цепочке (как будто мы жмем SELECT_...)
+        // Имитация выбора деталей по цепочке
         savedUser.setSelectedCpuId(1L);
         savedUser.setState("CHOOSING_MB");
         userRepository.save(savedUser);
@@ -67,18 +67,18 @@ class BotIntegrationTest {
         savedUser.setState("CHOOSING_CASE");
         userRepository.save(savedUser);
 
-        // 4. Финал сборки
+
         savedUser.setSelectedCaseId(6L);
-        savedUser.setState("IDLE"); // Сборка окончена, бот свободен
+        savedUser.setState("IDLE");
         userRepository.save(savedUser);
 
-        // 5. Итоговая проверка (Asserts) - проверяем, что в базе все сохранилось верно
+
         BotUser finalUser = userRepository.findByTelegramId(123456789L).get();
         Assertions.assertEquals("IDLE", finalUser.getState());
         Assertions.assertEquals(1L, finalUser.getSelectedCpuId());
         Assertions.assertEquals(6L, finalUser.getSelectedCaseId());
 
-        // Очищаем базу после теста
+
         userRepository.delete(finalUser);
     }
 }
