@@ -18,16 +18,16 @@ public class PowerCalculatorService {
 
             if (cpu == null || gpu == null) return 500;
 
-            // БЕЗОПАСНОЕ ИЗВЛЕЧЕНИЕ ЧИСЕЛ (защита от ClassCastException)
+
             int cpuTdp = ((Number) cpu.get("tdp")).intValue();
             int gpuPower = ((Number) gpu.get("powerRequired")).intValue();
 
-            // Считаем потребление: (Процессор + Видеокарта) + 20% запаса надежности
+
             double totalPower = (cpuTdp + gpuPower) * 1.2;
             return (int) Math.ceil(totalPower);
 
         } catch (Exception e) {
-            // ТЕПЕРЬ ОШИБКА БУДЕТ ВИДНА В КОНСОЛИ
+
             System.err.println("КРИТИЧЕСКАЯ ОШИБКА РАСЧЕТА МОЩНОСТИ:");
             e.printStackTrace();
             return 500;
