@@ -13,7 +13,7 @@ public class AssemblyController {
         System.out.println("✅ Получена новая сборка от пользователя: " + request.getTelegramId());
         System.out.println("CPU: " + request.getCpuId() + ", GPU: " + request.getGpuId());
 
-        // Здесь в будущем будет логика сохранения в PostgreSQL (assemblyRepository.save(...))
+
 
         return ResponseEntity.ok("Сборка успешно сохранена в Assembly Service!");
     }
