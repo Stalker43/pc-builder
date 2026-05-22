@@ -24,9 +24,7 @@ public class CompatibilityController {
     private final RestTemplate restTemplate = new RestTemplate();
     private final String COMPONENT_API = "http://component-service:8081/api/";
 
-    // =========================================================================
-    // 1. КРИТИЧЕСКИЕ МЕТОДЫ ДЛЯ РАБОТЫ ТЕЛЕГРАМ-БОТА (ФИЛЬТРАЦИЯ ПРИ ВЫБОРЕ)
-    // =========================================================================
+
 
     @GetMapping("/motherboards")
     public List<MotherboardDto> getCompatibleMotherboards(@RequestParam Long cpuId) {
